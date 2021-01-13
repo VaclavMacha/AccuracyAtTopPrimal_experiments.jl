@@ -65,18 +65,17 @@ end
 
 function add_targets_scores!(d::Dict, x, y, key::Symbol, runon)
     overwrite = false
+    model = deepcopy(d[:model]) |> runon
     if haskey(d, key)
         if !haskey(d[key], :targets)
             d[key][:targets] = cpu(vec(y))
             overwrite = true
         end
         if !haskey(d[key], :scores)
-            model = d[:model] |> runon
             d[key][:scores] = cpu(compute_scores(model, x))
             overwrite = true
         end
     else
-        model = d[:model] |> runon
         d[key] = Dict(
             :targets => cpu(vec(y)),
             :scores => cpu(compute_scores(model, x)),
@@ -90,11 +89,12 @@ end
 function add_loss!(d, key::Symbol)
     overwrite = false
     type = extract_model_type(d)
+    model = deepcopy(d[:model])
     if !haskey(d, key)
         return overwrite
     end
     if !haskey(d[key], :loss)
-        pars = params(d[:model])
+        pars = params(model)
         targets = d[key][:targets]
         scores = d[key][:scores]
 
@@ -106,7 +106,7 @@ function add_loss!(d, key::Symbol)
         overwrite = true
     end
     if !haskey(d[key], :loss_zeros)
-        pars = params(d[:model])
+        pars = params(model)
         for p in pars
             p .= 0
         end
@@ -168,8 +168,7 @@ function run_evaluation(Dataset_Settings; runon = cpu)
         @unpack dataset, posclass = dataset_settings
         @info "Dataset: $(dataset), positive class label: $(posclass)"
 
-        labelmap = (y) -> y == posclass
-        train, valid, test = load(dataset; labelmap = labelmap) |> runon
+        train, valid, test = loaddataset(dataset, posclass) |> runon
 
         dataset_dir = datadir("models", dataset_savename(dataset_settings))
         all_files = String[]
@@ -202,11 +201,11 @@ end
 # Plots
 # ------------------------------------------------------------------------------------------
 function plot_convergence(model_settings; k = 1, iters = 1000)
-    x, y = load(ToyExample; k = k)
+    x, y = load_toyexample(; k = k)
 
     # training
     type = model_settings[:type]
-    model = build_network(ToyExample)
+    model = Dense(2, 1)
     objective = build_loss(type, model_settings)
     pars = params(model)
     delete!(pars, model.b)
