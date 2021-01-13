@@ -141,7 +141,7 @@ function save_simulation(
         :train_settings => deepcopy(train_settings),
         :model_settings => deepcopy(model_settings),
         :time_per_iter => tm,
-        :model => cpu(model),
+        :model => deepcopy(cpu(model)),
         :loss => c.loss.values,
         :minibatch => Dict(
             :targets => cpu(vec(y)),
@@ -154,20 +154,30 @@ function save_simulation(
     model_dict[:iters] = simulation[:train_settings][:iters]
 
     isdir(savedir) || mkpath(savedir)
-    bson(joinpath(savedir, simulation_name(model_dict[:iters])), simulation)
+    bson(joinpath(savedir, simulation_name(model_dict[:iters])), deepcopy(simulation))
     return
+end
+
+
+function istrained(dataset_settings, train_settings, model_settings)
+    files = joinpath.(modeldir(
+       dataset_settings,
+       train_settings,
+       model_settings),
+       simulation_name.(200:200:1000)
+    )
+    return all(isfile.(files))
 end
 
 # -------------------------------------------------------------------------------
 # Runing simulations
 # -------------------------------------------------------------------------------
-function run_simulations(Dataset_Settings, Train_Settings, Model_Settings; runon = cpu)
+function run_simulations(Dataset_Settings, Train_Settings, Model_Settings; runon = cpu, force = false)
     for dataset_settings in dict_list_simple(Dataset_Settings)
         @unpack dataset, posclass = dataset_settings
         @info "Dataset: $(dataset), positive class label: $(posclass)"
 
-        labelmap = (y) -> y == posclass
-        (x_train, y_train), ~, ~ = load(dataset; labelmap = labelmap) |> runon
+        (x_train, y_train), ~, ~ = loaddataset(dataset, posclass) |> runon
 
         for train_settings in dict_list_simple(Train_Settings)
             @unpack batchsize, iters, seed = train_settings
@@ -179,6 +189,9 @@ function run_simulations(Dataset_Settings, Train_Settings, Model_Settings; runon
             make_batch = batch_provider(x_train, y_train, batchsize)
 
             for model_settings in dict_list_valid(Model_Settings)
+                if istrained(dataset_settings, train_settings, model_settings) && !force
+                    continue
+                end
                 @unpack type = model_settings
                 model_settings[:seed] = seed
 
@@ -226,8 +239,7 @@ function run_benchmark(Dataset_Settings, Train_Settings, Model_Settings; runon =
         @unpack dataset, posclass = dataset_settings
         @info "Dataset: $(dataset), positive class label: $(posclass)"
 
-        labelmap = (y) -> y == posclass
-        (x_train, y_train), ~, ~ = load(dataset; labelmap = labelmap) |> runon
+        (x_train, y_train), ~, ~ = loaddataset(dataset, posclass) |> runon
 
         for train_settings in dict_list_simple(Train_Settings)
             @unpack batchsize, iters, seed = train_settings
