@@ -1,7 +1,6 @@
-logrange(x1, x2; kwargs...) = exp10.(range(log10(x1), log10(x2); kwargs...))
-
-
-# Eval functions
+# ------------------------------------------------------------------------------------------
+# Eval metrics
+# ------------------------------------------------------------------------------------------
 function tpr_at_fpr(targets, scores, rate)
     t = threshold_at_fpr(targets, scores, rate)
     return true_positive_rate(targets, scores, t)
@@ -17,6 +16,8 @@ function tpr_at_top(targets, scores)
     return true_positive_rate(targets, scores, t)
 end
 
+logrange(x1, x2; kwargs...) = exp10.(range(log10(x1), log10(x2); kwargs...))
+
 function partial_auroc(targets, scores, fprmax)
     rates = logrange(1e-5, fprmax; length=1000)
     ts = unique(threshold_at_fpr(targets, scores, rates))
@@ -31,7 +32,10 @@ function partial_auroc(targets, scores, fprmax)
     return 100*EvalMetrics.auc_trapezoidal(fprs, tprs)/auc_max
 end
 
-#
+
+# ------------------------------------------------------------------------------------------
+# Collect results
+# ------------------------------------------------------------------------------------------
 function mergesettings(dict)
     d = deepcopy(dict)
     data = d[:dataset_settings]
@@ -92,7 +96,10 @@ function collect_metrics(
     return table
 end
 
-#
+
+# ------------------------------------------------------------------------------------------
+# Metric selection
+# ------------------------------------------------------------------------------------------
 function selectmetric(df, metric::Symbol)
     table = select(df, vcat([:dataset, :model, :K, :β, :λ, :τ], metric))
 
@@ -122,9 +129,58 @@ function selectmetric(df, metrics)
     )
 end
 
-function selectbest(df_valid, df_test, metric::Symbol; wide = true)
-    table_valid = selectmetric(df_valid, metric)
-    table_test = selectmetric(df_test, metric)
+function selectmetric_seed(df, metric::Symbol)
+    table = select(df, vcat([:dataset, :model, :K, :β, :λ, :τ, :seed], metric))
+
+    table = @from i in table begin
+        @group i by {i.dataset, i.seed, i.model, i.K, i.β, i.λ, i.τ} into gr
+        @select {
+            dataset = string(Query.key(gr).dataset, "_", Query.key(gr).seed),
+            model = Query.key(gr).model,
+            K = Query.key(gr).K,
+            β = Query.key(gr).β,
+            λ = Query.key(gr).λ,
+            τ = Query.key(gr).τ,
+            metric = mean(getproperty(gr, metric)),
+        }
+        @collect DataFrame
+    end
+    rename!(table, :metric => metric)
+    return table
+end
+
+function selectmetric_seed(df, metrics)
+    dfs = selectmetric_seed.(Ref(df), metrics)
+    return innerjoin(
+        dfs...;
+        on = [:dataset, :model, :K, :β, :λ, :τ],
+        matchmissing = :equal
+    )
+end
+
+function changemodelname!(gr)
+    model = gr.model[1]
+    if model in ["Grill", "GrillNP", "τFPL", "TopMean", "PatMat", "PatMatNP"]
+        gr.model .= string.(model, "(", gr.τ, ")")
+    end
+    return
+end
+
+function selectbest(
+    df_valid,
+    df_test,
+    metric::Symbol;
+    wide = true,
+    addparams = false,
+    addseed = false
+)
+    if addseed
+        table_valid = selectmetric_seed(df_valid, metric)
+        table_test = selectmetric_seed(df_test, metric)
+    else
+        table_valid = selectmetric(df_valid, metric)
+        table_test = selectmetric(df_test, metric)
+    end
 
     key_val = Symbol(metric, "_valid")
     rename!(table_valid, metric => key_val)
@@ -135,6 +191,7 @@ function selectbest(df_valid, df_test, metric::Symbol; wide = true)
         on = [:dataset, :model, :K, :β, :λ, :τ,],
         matchmissing = :equal
     )
+    addparams && map(changemodelname!, groupby(table, :model))
 
     table_best = @from i in table begin
         @group i by {i.dataset, i.model} into gr
@@ -154,14 +211,19 @@ function selectbest(df_valid, df_test, metric::Symbol; wide = true)
     end
 end
 
-function crit_diag(df_valid, df_test, metric; α = 0.05)
-    table = selectbest(df_valid, df_test, metric; wide = true)
+# ------------------------------------------------------------------------------------------
+# Critical diagrams
+# ------------------------------------------------------------------------------------------
+renamealgs(alg) = replace(alg, "τ" => "\$\\tau\$-")
+
+function crit_diag(df_valid, df_test, metric; α = 0.05, kwargs...)
+    table = selectbest(df_valid, df_test, metric; wide = true, kwargs...)
     rank_df = PaperUtils.rankdf(table)
 
     R = Vector(rank_df[end, 2:end])
     n, k = size(rank_df) .- 1
     algnames = names(rank_df)[2:end]
-    replace!(algnames, "τFPL" => "\$\\tau\$-FPL")
+    algnames = renamealgs.(algnames)
     ncd = PaperUtils.nemenyi_cd(k, n, α)
 
     file = datadir("results", "crit_diag_$(metric).tex")
