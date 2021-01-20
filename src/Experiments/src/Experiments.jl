@@ -7,11 +7,14 @@ using Reexport
 @reexport using CSV
 @reexport using DatasetProvider
 @reexport using DataFrames
-@reexport using DrWatson
-@reexport using EvalMetrics
 @reexport using Flux
-@reexport using PaperUtils
-@reexport using Query
+
+using BenchmarkTools
+using DrWatson
+using EvalMetrics
+using Measurements
+using PaperUtils
+using Query
 
 using ProgressMeter
 using Random
@@ -25,7 +28,7 @@ using Flux: gpu, cpu, params
 using StatsBase: sample
 
 export Data, Train, Model
-export trainmodel, davemodel, loadmodel, loaddata, run_simulations, collect_metrics, selectmetric, selectbest, crit_diag
+export trainmodel, davemodel, loadmodel, loaddata, run_simulations, collect_metrics, selectmetric, selectbest, crit_diag, run_benchmarks
 
 DrWatson.datadir(args...) = joinpath("/disk/macha/data_oms/data_new", args...)
 modeldir(args...) = datadir("models", args...)

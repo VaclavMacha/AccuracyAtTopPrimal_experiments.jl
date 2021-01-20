@@ -19,8 +19,7 @@ struct Data{N<:Name}
 end
 
 function Base.show(io::IO, d::Data{N}) where {N}
-    pars = [:seed, :shuffle]
-    d.poslabels != 0 && push!(pars, :poslabels)
+    pars = [:seed, :shuffle,:poslabels]
     d.batchsize != 0 && push!(pars, :batchsize)
     print(io, nameof(N), NamedTuple{(pars...,)}(getfield.(Ref(d), pars)))
     return

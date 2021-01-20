@@ -63,7 +63,9 @@ function custom_train!(loss, ps, data, opt; cb = (args...) -> ())
     end
 end
 
-# callback
+# ------------------------------------------------------------------------------------------
+# callback and savemodel
+# ------------------------------------------------------------------------------------------
 Base.@kwdef mutable struct CallBack
     iters::Int
     title::String = "Training:"
@@ -144,7 +146,9 @@ function loadmodel(d::Data, t::Train, m::Model)
     end
 end
 
-# trainmodel
+# ------------------------------------------------------------------------------------------
+# sumilations
+# ------------------------------------------------------------------------------------------
 function trainmodel(
     d::Data,
     t::Train,
@@ -176,7 +180,7 @@ function trainmodel(
 
     # training
     Random.seed!(t.seed)
-    batches = batch_provider(d, t, x, y)
+    batches = batch_provider(d, t, x, y) |> runon
     opt = t.optimiser(t.step)
 
     custom_train!(loss, pars, batches, opt; cb = cb)
@@ -238,4 +242,75 @@ function update_results!(
         get!(dict[:iterations][iter][key], :loss, cpu(loss(x, y, model, pars)))
         get!(dict[:iterations][iter][key], :loss_zero, cpu(loss(x, y, model0, pars0)))
     end
+end
+
+# ------------------------------------------------------------------------------------------
+# benchmarks
+# ------------------------------------------------------------------------------------------
+function benchmarkmodel(
+    d::Data,
+    t::Train,
+    m::Model{T},
+    x,
+    y;
+    runon = cpu,
+) where {T}
+
+    # create model
+    model, pars = build_network(d, t) |> runon
+    objective = build_loss(m)
+    loss(x, y) = objective(x, y, model, pars)
+
+    # training
+    if d.batchsize == 0
+        batches = [(x, y)]
+    else
+        batches = Flux.Data.DataLoader((x, y); batchsize = 512, shuffle = true, partial = false)
+    end
+    batches = batches |> runon
+    opt = t.optimiser(t.step)
+
+    bench = @benchmark Flux.train!($loss, $pars, $batches, $opt)
+
+    dict = merge(todict(d), todict(m))
+    tms = bench.times .* 1e-9
+    dict[:time] = measurement(mean(tms), std(tms))
+
+    return select(DataFrame(dict), [:dataset, :model, :time])
+end
+
+function run_benchmarks(Datasets; runon = cpu, force = false)
+
+    file = datadir("results", "benchmark.csv")
+    isfile(file) && !force && return CSV.read(file, DataFrame; header = true)
+
+    Datasets = isa(Datasets, Data) ? [Datasets] : Datasets
+    Models = vcat(
+        Model(PatMat; τ = 0.05, β = 1, surrogate = hinge),
+        Model(PatMatNP; τ = 0.05, β = 1, surrogate = hinge),
+        Model(TopPush; λ = 1),
+        Model(TopPushK; K = 5),
+        Model(τFPL; τ = 0.05, λ = 1, surrogate = hinge),
+        Model(TopMean; τ = 0.05, λ = 1, surrogate = hinge),
+        Model(Grill; τ = 0.05, λ = 1, surrogate = hinge),
+        Model(GrillNP; τ = 0.05, λ = 1, surrogate = hinge),
+    )
+    t = Train(; seed = 1, iters = 1, optimiser = ADAM, step = 0.01)
+
+    rows = []
+    runs = length(Datasets) * length(Models)
+    bar = Progress(runs, 5, "Benchmarks")
+    for dataset in Datasets
+        train, valid, test = loaddata(dataset) |> runon
+        for m in Models
+            row = benchmarkmodel(dataset, t, m, train...; runon)
+            next!(bar)
+            push!(rows, row)
+        end
+    end
+    table = unstack(reduce(vcat, rows), :model, :time)
+
+    mkpath(dirname(file))
+    CSV.write(file, table)
+    return table
 end

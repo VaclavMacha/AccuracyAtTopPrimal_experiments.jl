@@ -46,6 +46,12 @@ version = "0.2.6"
 [[Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
+[[BenchmarkTools]]
+deps = ["JSON", "Logging", "Printf", "Statistics", "UUIDs"]
+git-tree-sha1 = "9e62e66db34540a0c919d72172cc2f642ac71260"
+uuid = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+version = "0.5.0"
+
 [[BinDeps]]
 deps = ["Libdl", "Pkg", "SHA", "URIParser", "Unicode"]
 git-tree-sha1 = "1289b57e8cf019aede076edab0587eb9644175bd"
@@ -93,6 +99,12 @@ git-tree-sha1 = "39f6f584bec264ace76f924d1c8637c85617697e"
 uuid = "052768ef-5323-5732-b1bb-66c8b64840ba"
 version = "2.4.0"
 
+[[Calculus]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
+uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
+version = "0.5.1"
+
 [[CategoricalArrays]]
 deps = ["DataAPI", "Future", "JSON", "Missings", "Printf", "Statistics", "StructTypes", "Unicode"]
 git-tree-sha1 = "5861101791fa76fafe8dddefd70ffbfe4e33ecae"
@@ -101,15 +113,15 @@ version = "0.9.0"
 
 [[ChainRules]]
 deps = ["ChainRulesCore", "Compat", "LinearAlgebra", "Random", "Reexport", "Requires", "Statistics"]
-git-tree-sha1 = "b287f130a0f32011a8f08ab4c8e5d797b4c16117"
+git-tree-sha1 = "0af5c12e5528fc2df87a5f084195f10bfbf03a28"
 uuid = "082447d4-558c-5d27-93f4-14fc19e9eca2"
-version = "0.7.46"
+version = "0.7.48"
 
 [[ChainRulesCore]]
-deps = ["LinearAlgebra", "SparseArrays"]
-git-tree-sha1 = "0acfdec745cb4cb38ad23c8668a1b7e58b42594a"
+deps = ["Compat", "LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "89a0b14325d0f02f9caed7c8ba91181a5d254874"
 uuid = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-version = "0.9.25"
+version = "0.9.26"
 
 [[CodecZlib]]
 deps = ["TranscodingStreams", "Zlib_jll"]
@@ -188,7 +200,7 @@ version = "0.4.13"
 
 [[DatasetProvider]]
 deps = ["BSON", "CSV", "CodecZlib", "DataDeps", "DataFrames", "Dates", "InteractiveUtils", "MLDatasets", "Mmap", "Random", "Statistics", "StatsBase"]
-git-tree-sha1 = "dc02f9850891ce7beadd61445b42a31999d19dd7"
+git-tree-sha1 = "a90a061f8ec85e5a8be385b2417c4a7aae1afd57"
 repo-rev = "master"
 repo-url = "https://github.com/VaclavMacha/DatasetProvider"
 uuid = "913e5785-22c8-4999-b545-348ed9033f52"
@@ -279,9 +291,9 @@ version = "0.4.2"
 
 [[ForwardDiff]]
 deps = ["CommonSubexpressions", "DiffResults", "DiffRules", "NaNMath", "Random", "SpecialFunctions", "StaticArrays"]
-git-tree-sha1 = "8de2519a83c6c1c2442c2f481dd9a8364855daf4"
+git-tree-sha1 = "c26b56e9b9f0687f7ca887f6b6ded03d269e0e35"
 uuid = "f6369f11-7733-5829-9624-2563aa707210"
-version = "0.10.14"
+version = "0.10.15"
 
 [[Functors]]
 deps = ["MacroTools"]
@@ -450,6 +462,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "0eef589dd1c26a3ac9d753fe1a8bcad63f956fa6"
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
 version = "2.16.8+1"
+
+[[Measurements]]
+deps = ["Calculus", "LinearAlgebra", "RecipesBase", "Requires"]
+git-tree-sha1 = "be32718b48b5ec428109736bbaf6761fdcc5dd17"
+uuid = "eff96d63-e80a-5855-80a2-b1b0885c5ab7"
+version = "2.3.0"
 
 [[Media]]
 deps = ["MacroTools", "Test"]
@@ -767,9 +785,9 @@ version = "1.4.5+2"
 
 [[Zygote]]
 deps = ["AbstractFFTs", "ChainRules", "DiffRules", "Distributed", "FillArrays", "ForwardDiff", "IRTools", "InteractiveUtils", "LinearAlgebra", "MacroTools", "NaNMath", "Random", "Requires", "SpecialFunctions", "Statistics", "ZygoteRules"]
-git-tree-sha1 = "d88a7e71fc2eef9510187b1c7d4af7a5177633d0"
+git-tree-sha1 = "52032f3eb3bf383df34f5455c031457632e8c6d4"
 uuid = "e88e6eb3-aa80-5325-afca-941959d7151f"
-version = "0.6.0"
+version = "0.6.1"
 
 [[ZygoteRules]]
 deps = ["MacroTools"]
