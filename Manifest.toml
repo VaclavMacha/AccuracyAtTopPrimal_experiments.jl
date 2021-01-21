@@ -236,12 +236,6 @@ git-tree-sha1 = "5c6a645ea65af6aac4f96b5dedaae660b7b56267"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
 version = "0.24.10"
 
-[[DocStringExtensions]]
-deps = ["LibGit2", "Markdown", "Pkg", "Test"]
-git-tree-sha1 = "50ddf44c53698f5e784bbebb3f4b21c5807401b1"
-uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
-version = "0.8.3"
-
 [[DrWatson]]
 deps = ["Dates", "FileIO", "LibGit2", "Pkg", "Random", "Requires", "UnPack"]
 git-tree-sha1 = "026cfaa2341860e7436256b8272d73d4f91a5c18"
@@ -249,8 +243,10 @@ uuid = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
 version = "1.16.6"
 
 [[EvalMetrics]]
-deps = ["DocStringExtensions", "RecipesBase", "Reexport", "Statistics", "StatsBase"]
-git-tree-sha1 = "5b735114e1317de1fb748f941a5437ac63bebabd"
+deps = ["RecipesBase", "Reexport", "Requires", "Statistics"]
+git-tree-sha1 = "396e08840df610dc9a83334349c02c401e1b8824"
+repo-rev = "docs"
+repo-url = "https://github.com/VaclavMacha/EvalMetrics.jl.git"
 uuid = "251d5f9e-10c1-4699-ba24-e0ad168fa3e4"
 version = "0.2.0"
 
