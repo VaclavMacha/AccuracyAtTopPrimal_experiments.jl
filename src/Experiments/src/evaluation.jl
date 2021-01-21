@@ -83,10 +83,14 @@ function collect_metrics(
     isfile(file) && !force && return CSV.read(file, DataFrame; header = true)
 
     rows = []
-    for (root, dirs, files) in walkdir(path)
+    @time for (root, dirs, files) in walkdir(path)
         for file in files
-            dict = BSON.load(joinpath(root, file))
-            push!(rows, computemetrics(dict, iter, subset))
+            try
+                dict = BSON.load(joinpath(root, file))
+                push!(rows, computemetrics(dict, iter, subset))
+            catch
+                @warn "File corrupted: $(joinpath(root, file))"
+            end
         end
     end
     table = reduce(vcat, rows)
