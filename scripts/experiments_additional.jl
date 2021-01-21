@@ -1,5 +1,5 @@
 using Experiments
-using Experiments: AccuracyAtTopPrimal, DatasetProvider
+using Experiments: AccuracyAtTopPrimal, DatasetProvider, EvalMetrics
 
 using DatasetProvider: MNIST, FashionMNIST, CIFAR10, CIFAR20, CIFAR100, SVHN2
 
@@ -47,11 +47,3 @@ models = vcat(
 # Train and collect
 # ------------------------------------------------------------------------------------------
 run_simulations(datasets, train, models)
-
-iter = 10000
-force = true
-df_train = collect_metrics(; iter, subset = :train, force)
-df_valid = collect_metrics(; iter, subset = :valid, force)
-df_test = collect_metrics(; iter, subset = :test, force)
-
-@info "finished"
