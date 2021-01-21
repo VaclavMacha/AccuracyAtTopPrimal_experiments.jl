@@ -84,7 +84,7 @@ function collect_metrics(
 
     rows = []
     prog = ProgressUnknown("Collecting results ($(subset) set at iteration = $(iter)) ")
-    @time for (root, dirs, files) in walkdir(path)
+    for (root, dirs, files) in walkdir(path)
         for file in files
             try
                 dict = BSON.load(joinpath(root, file))
