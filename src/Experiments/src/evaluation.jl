@@ -83,6 +83,7 @@ function collect_metrics(
     isfile(file) && !force && return CSV.read(file, DataFrame; header = true)
 
     rows = []
+    prog = ProgressUnknown("Collecting results ($(subset) set at iteration = $(iter)) ")
     @time for (root, dirs, files) in walkdir(path)
         for file in files
             try
@@ -91,8 +92,10 @@ function collect_metrics(
             catch
                 @warn "File corrupted: $(joinpath(root, file))"
             end
+            ProgressMeter.next!(prog)
         end
     end
+    ProgressMeter.finish!(prog)
     table = reduce(vcat, rows)
 
     mkpath(dirname(file))
