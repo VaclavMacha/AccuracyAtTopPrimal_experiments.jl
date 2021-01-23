@@ -56,6 +56,7 @@ function computemetrics(d, iter, subset)
     dict[:subset] = subset
     dict[:iter] = iter
     dict[:loss] = extract(d, iter, subset, :loss)
+    dict[:loss_best] = minimum(d[:loss])
     dict[:loss_zero] = extract(d, iter, subset, :loss_zero)
     dict[:top] = tpr_at_top(targets, scores)
     dict[:fpr_1] = tpr_at_fpr(targets, scores, 0.01)
@@ -107,19 +108,40 @@ end
 # ------------------------------------------------------------------------------------------
 # Metric selection
 # ------------------------------------------------------------------------------------------
-function selectmetric(df, metric::Symbol)
-    table = select(df, vcat([:dataset, :model, :K, :β, :λ, :τ], metric))
+function datasetname(name, poslabel, seed; addposlabels = true, addseed = true)
+    pars = []
+    addposlabels && push!(pars, "poslabel = $poslabel")
+    addseed && push!(pars, "seed = $seed")
+    if isempty(pars)
+        return string(name)
+    else
+        return string(name, "(", join(pars, ","), ")")
+    end
+end
 
-    table = @from i in table begin
+function modelname(model, τ; addparams = true)
+    addparams || return model
+    if model in ["Grill", "GrillNP", "τFPL", "TopMean", "PatMat", "PatMatNP"]
+        return string.(model, "(", τ, ")")
+    end
+    return model
+end
+
+function selectmetric(df, metric::Symbol; reducefunc = mean, addparams = true, kwargs...)
+    tmp = select(df, vcat([:dataset, :poslabels, :seed, :model,  :K, :β, :λ, :τ], metric))
+    tmp.dataset .= datasetname.(tmp.dataset, tmp.poslabels, tmp.seed; kwargs...)
+    tmp.model .= modelname.(tmp.model, tmp.τ; addparams)
+
+    table = @from i in tmp begin
         @group i by {i.dataset, i.model, i.K, i.β, i.λ, i.τ} into gr
         @select {
-            dataset = Query.key(gr).dataset,
-            model = Query.key(gr).model,
-            K = Query.key(gr).K,
-            β = Query.key(gr).β,
-            λ = Query.key(gr).λ,
-            τ = Query.key(gr).τ,
-            metric = mean(getproperty(gr, metric)),
+            dataset = key(gr).dataset,
+            model = key(gr).model,
+            K = key(gr).K,
+            β = key(gr).β,
+            λ = key(gr).λ,
+            τ = key(gr).τ,
+            metric = reducefunc(getproperty(gr, metric)),
         }
         @collect DataFrame
     end
@@ -127,67 +149,26 @@ function selectmetric(df, metric::Symbol)
     return table
 end
 
-function selectmetric(df, metrics)
-    dfs = selectmetric.(Ref(df), metrics)
+function selectmetric(df, metrics; kwargs...)
+    dfs = selectmetric.(Ref(df), metrics; kwargs...)
     return innerjoin(
         dfs...;
         on = [:dataset, :model, :K, :β, :λ, :τ],
         matchmissing = :equal
     )
-end
-
-function selectmetric_seed(df, metric::Symbol)
-    table = select(df, vcat([:dataset, :model, :K, :β, :λ, :τ, :seed], metric))
-
-    table = @from i in table begin
-        @group i by {i.dataset, i.seed, i.model, i.K, i.β, i.λ, i.τ} into gr
-        @select {
-            dataset = string(Query.key(gr).dataset, "_", Query.key(gr).seed),
-            model = Query.key(gr).model,
-            K = Query.key(gr).K,
-            β = Query.key(gr).β,
-            λ = Query.key(gr).λ,
-            τ = Query.key(gr).τ,
-            metric = mean(getproperty(gr, metric)),
-        }
-        @collect DataFrame
-    end
-    rename!(table, :metric => metric)
-    return table
-end
-
-function selectmetric_seed(df, metrics)
-    dfs = selectmetric_seed.(Ref(df), metrics)
-    return innerjoin(
-        dfs...;
-        on = [:dataset, :model, :K, :β, :λ, :τ],
-        matchmissing = :equal
-    )
-end
-
-function changemodelname!(gr)
-    model = gr.model[1]
-    if model in ["Grill", "GrillNP", "τFPL", "TopMean", "PatMat", "PatMatNP"]
-        gr.model .= string.(model, "(", gr.τ, ")")
-    end
-    return
 end
 
 function selectbest(
     df_valid,
     df_test,
     metric::Symbol;
+    selector = argmax,
     wide = true,
-    addparams = false,
-    addseed = false
+    kwargs...
 )
-    if addseed
-        table_valid = selectmetric_seed(df_valid, metric)
-        table_test = selectmetric_seed(df_test, metric)
-    else
-        table_valid = selectmetric(df_valid, metric)
-        table_test = selectmetric(df_test, metric)
-    end
+
+    table_valid = selectmetric(df_valid, metric; kwargs...)
+    table_test = selectmetric(df_test, metric; kwargs...)
 
     key_val = Symbol(metric, "_valid")
     rename!(table_valid, metric => key_val)
@@ -198,14 +179,13 @@ function selectbest(
         on = [:dataset, :model, :K, :β, :λ, :τ,],
         matchmissing = :equal
     )
-    addparams && map(changemodelname!, groupby(table, :model))
 
     table_best = @from i in table begin
         @group i by {i.dataset, i.model} into gr
         @select {
             dataset = Query.key(gr).dataset,
             model = Query.key(gr).model,
-            metric = getproperty(gr, metric)[argmax(getproperty(gr, key_val))]
+            metric = getproperty(gr, metric)[selector(getproperty(gr, key_val))]
         }
         @collect DataFrame
     end
@@ -215,6 +195,52 @@ function selectbest(
         return unstack(table_best, :model, metric)
     else
         return table_best
+    end
+end
+
+function betterparams(model, gr)
+    n = length(gr.loss)
+    inds = findall(gr.loss .<= gr.loss_zero)
+
+    if length(inds) == n
+        return "all"
+    elseif isempty(inds)
+        return "none"
+    else
+        if get(model) == "TopPushK"
+            pars = gr.K
+        elseif any(contains.(get(model), ["Grill", "τFPL", "TopMean", "TopPush"]))
+            pars = gr.λ
+        else
+            pars = gr.β
+        end
+        return join(sort(get.(pars)[inds]), ", ")
+    end
+end
+
+function betterzero(df; wide = true)
+    table = selectmetric(
+        df,
+        [:loss, :loss_zero];
+        reducefunc = minimum,
+        addposlabels = false,
+        addseed = false
+    )
+
+    table_pars = @from i in table begin
+        @group i by {i.dataset, i.model} into gr
+        @select {
+            dataset = Query.key(gr).dataset,
+            model = Query.key(gr).model,
+            params = betterparams(Query.key(gr).model, gr)
+        }
+        @collect DataFrame
+    end
+
+    if wide
+        return unstack(table_pars, :dataset, :params)
+    else
+        return table_pars
     end
 end
 
@@ -237,4 +263,36 @@ function crit_diag(df_valid, df_test, metric; α = 0.05, kwargs...)
     mkpath(dirname(file))
     PaperUtils.string2file(file, PaperUtils.ranks2tikzcd(R, algnames, ncd))
     return
+end
+
+# ------------------------------------------------------------------------------------------
+# Dataset summary
+# ------------------------------------------------------------------------------------------
+samplesize(N) = join(DatasetProvider.nattributes(N), "x")
+ratio(y) = round(100*sum(y)/length(y); digits = 1)
+
+function summary(dataset::Data{N}) where N
+    train, valid, test = loaddata(dataset)
+    return DataFrame([
+        :dataset => N,
+        :sample => samplesize(N),
+        :batchsize => dataset.batchsize == 0 ? missing : dataset.batchsize,
+        :train => length(train[2]),
+        :train_ratio => ratio(train[2]),
+        :valid => length(valid[2]),
+        :valid_ratio => ratio(valid[2]),
+        :test => length(test[2]),
+        :test_ratio => ratio(test[2]),
+    ])
+end
+
+function summary(datasets; force = false)
+    file = datadir("results", "summary_datasets.csv")
+    isfile(file) && !force && return CSV.read(file, DataFrame; header = true)
+
+    table = reduce(vcat, summary.(datasets))
+
+    mkpath(dirname(file))
+    CSV.write(file, table)
+    return table
 end
