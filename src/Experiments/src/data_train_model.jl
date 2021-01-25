@@ -132,17 +132,22 @@ function todict(m::Model{T}) where {T}
 end
 
 # Thresholds
-build(T::Union{Type{PatMat}, Type{PatMatNP}}, τ, surr, β) = T(τ, x -> surr(x, β))
-validkeys(::Union{Type{PatMat}, Type{PatMatNP}}) = (:τ, :surrogate, :β)
+build(T::Type{<:Union{PatMat, PatMatNP}}, τ, surr, β) = T(τ, x -> surr(x, β))
+validkeys(::Type{<:Union{PatMat, PatMatNP}}) = (:τ, :surrogate, :β)
+savekeys(::Union{Type{PatMat}, Type{PatMatNP}}) = (:τ, :surrogate, :β, :λ)
 
-build(T::Union{Type{Grill}, Type{GrillNP}, Type{τFPL}, Type{TopMean}}, τ) = T(τ)
-validkeys(::Union{Type{Grill}, Type{GrillNP}, Type{τFPL}, Type{TopMean}}) = (:τ, )
+build(T::Type{<:Union{Grill, GrillNP, τFPL, TopMean}}, τ) = T(τ)
+validkeys(::Type{<:Union{Grill, GrillNP, τFPL, TopMean}}) = (:τ, )
+savekeys(::Type{<:Union{Grill, GrillNP, τFPL, TopMean}}) = (:τ, :surrogate, :λ)
 
 build(T::Type{TopPush}) = T()
 validkeys(::Type{TopPush}) = tuple()
+savekeys(::Type{TopPush}) = (:surrogate, :λ)
 
 build(T::Type{TopPushK}, K) = T(K)
 validkeys(::Type{TopPushK}) = (:K, )
+savekeys(::Type{TopPushK}) = (:K, :surrogate, :λ)
+
 
 
 function parameters(T::Type{<:AbstractThreshold}; kwargs...)
@@ -170,7 +175,7 @@ function build_loss(m::Model{T}) where {T}
     return loss
 end
 
-function build_loss(m::Model{T}) where {T<:Union{Type{Grill}, Type{GrillNP}}}
+function build_loss(m::Model{T}) where {T<:Type{<:Union{Grill, GrillNP}}}
     @unpack surr, λ = m
     thres = build(T, m.pars...)
 

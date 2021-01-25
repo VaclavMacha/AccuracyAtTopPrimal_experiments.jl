@@ -68,7 +68,7 @@ function computemetrics(d, iter, subset)
     get!(dict, :τ, missing)
     get!(dict, :K, missing)
     get!(dict, :β, missing)
-    delete!(dict, :surrogate)
+    get!(dict, :surrogate)
 
     return DataFrame(dict)
 end
@@ -265,6 +265,64 @@ function crit_diag(df_valid, df_test, metric; α = 0.05, kwargs...)
     return
 end
 
+
+# ------------------------------------------------------------------------------------------
+# Wilcoxon test
+# ------------------------------------------------------------------------------------------
+function wilcoxontest_pval(table, method1, method2; digits = 6)
+    if method1 == method2
+        return 1.0
+    else
+        x = Float64.(table[!, method1])
+        y = Float64.(table[!, method2])
+        return round(pvalue(SignedRankTest(x, y)); digits)
+    end
+end
+
+function wilcoxontest(df_valid, df_test, metric; digits = 6, diag = true, kwargs...)
+    table = selectbest(df_valid, df_test, metric; wide = true, kwargs...)
+    prm = sortperm(Vector(PaperUtils.rankdf(table)[end, 2:end])) .+ 1
+
+    table = table[:, vcat(1, prm)]
+    algs = names(table)[2:end]
+
+    n = 1:length(algs)
+    pvals = map(Base.product(n, n)) do (i, j)
+        if diag && j < i
+            return missing
+        else
+            return wilcoxontest_pval(table, algs[i], algs[j]; digits)
+        end
+    end |> DataFrame
+
+    algnames = renamealgs.(algs)
+    rename!(pvals, algnames)
+    insertcols!(pvals, 1, :methods => algnames)
+
+    file = datadir("results", "wilcoxon_$(metric).csv")
+    mkpath(dirname(file))
+    CSV.write(file, pvals)
+
+    # corr plot
+    plt = corelationmatrix(
+        Matrix(pvals[:, 2:end]);
+        title = "$(metric)",
+        color = :Blues_9,
+        size = (800, 600),
+        ticks = (n, algs),
+        xrotation = 45,
+        axis = false,
+        digits = 2,
+    )
+
+    file = datadir("plots_wil", "wilcoxon_$(metric).png")
+    mkpath(dirname(file))
+    savefig(plt, file)
+    return pvals
+end
+
+
+
 # ------------------------------------------------------------------------------------------
 # Dataset summary
 # ------------------------------------------------------------------------------------------
@@ -295,4 +353,124 @@ function summary(datasets; force = false)
     mkpath(dirname(file))
     CSV.write(file, table)
     return table
+end
+
+# ------------------------------------------------------------------------------------------
+# Dataset summary
+# ------------------------------------------------------------------------------------------
+function restore_model(row::DataFrameRow)
+    model = eval(Symbol(row[:model]))
+    pars = [extractkey(row, key) for key in savekeys(model)]
+    return string(model, "(", join(pars, ", "), ")")
+end
+
+function extractkey(row::DataFrameRow, key)
+    val = key == :surrogate ? ":$(row[:surr])" : row[key]
+    return string(key, " = ", val)
+end
+
+function restore_train(row::DataFrameRow)
+    pars = join([
+        "seed = $(row[:seed])",
+        "iters = $(row[:iters])",
+        "saveat = $(row[:saveat])",
+        "optimiser = $(row[:optimiser])",
+        "step = $(row[:step])",
+    ], ", ")
+    return string("Train(", pars, ")")
+end
+
+function restore_dataset(row::DataFrameRow)
+    pars = [
+        "seed = 1234",
+        "shuffle = true",
+        "poslabels = $(row[:poslabels])",
+    ]
+    row[:batchsize] != 0 && push!(pars, "batchsize = $(row[:batchsize])")
+
+    return string(row[:dataset], "(", join(pars, ", "), ")")
+end
+
+function restore_path(row::DataFrameRow)
+    modeldir(restore_dataset(row), restore_train(row), string(restore_model(row), ".bson"))
+end
+
+loadrow(row::DataFrameRow) = BSON.load(restore_path(row))
+
+# ------------------------------------------------------------------------------------------
+# Averaged roc
+# ------------------------------------------------------------------------------------------
+function rocgroup(grp; iter = 10000, subset = :test, npoints = 300, kwargs...)
+    FPR = zeros(npoints)
+    TPR = zeros(npoints)
+    k = length(eachrow(grp))
+
+    for row in eachrow(grp)
+        d = loadrow(row)
+        targets = extract(d, iter, subset, :targets)
+        scores = extract(d, iter, subset, :scores)
+
+        fpr, tpr = computeroc(targets, scores; npoints, kwargs...)
+        FPR .+= fpr
+        TPR .+= tpr
+    end
+    return FPR./k, TPR./k
+end
+
+function computeroc(targets, scores; xlims = (1e-4, 1), npoints = 300)
+    quantils = EvalMetrics.logrange(xlims[1], xlims[2], length = npoints)
+    ts = threshold_at_fpr(targets, scores, quantils)
+    return roccurve(targets, scores, ts)
+end
+
+
+function plotroc(df, metric; kwargs...)
+    EvalMetrics.showwarnings(false)
+    sets = ["Gisette", "HEPMASS", "Ionosphere", "Spambase"]
+
+    table = @from i in df begin
+        @where i.poslabels == 1 || i.dataset in sets
+        @select i
+        @collect DataFrame
+    end
+
+    table_best = map(groupby(table, [:dataset, :poslabels, :seed, :model, :τ])) do grp
+        return grp[argmax(getproperty(grp, metric)), :]
+    end |> DataFrame
+
+    for grp in groupby(table_best, [:dataset, :poslabels, :model, :τ])
+        dir = string(grp.dataset[1], "(poslabels = ", grp.poslabels[1],")")
+        τ = grp.τ[1]
+        title = ismissing(τ) ? grp.model[1] : string(grp.model[1], "(", τ, ")")
+
+        @info string(dir, ", ", title)
+
+        fpr, tpr = rocgroup(grp; kwargs...)
+        auc_score = auc_trapezoidal(fpr, tpr)
+        auc_label = string.("auc: ", round.(100 * auc_score', digits = 2), "%")
+        plt = plot(
+            fpr,
+            tpr;
+            seriestype = :mlcurve,
+            xscale = :log10,
+            xlims = (1e-4, 1),
+            ylims = (0, 1),
+            title = "ROC: $title",
+            label = auc_label,
+            xlabel = "false positive rate",
+            ylabel = "true positive rate",
+            yticks = 0:0.2:1,
+            grid = true,
+            aucshow = true,
+            legend = :bottomright,
+        )
+
+        file = datadir("plots", string(metric), dir, string(title, ".png"))
+        mkpath(dirname(file))
+        savefig(plt, file)
+
+        file_df = datadir("plots_csv", string(metric), dir, string(title, ".csv"))
+        mkpath(dirname(file_df))
+        CSV.write(file_df, DataFrame(fpr = fpr, tpr = tpr))
+    end
 end
