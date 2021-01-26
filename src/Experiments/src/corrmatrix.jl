@@ -2,7 +2,7 @@
 
 @recipe function f(
     x::CorelationMatrix;
-    annotationargs = (size = 10, color = :grey),
+    annotationargs = (size = 8, color = :grey),
     digits = 2
 )
 

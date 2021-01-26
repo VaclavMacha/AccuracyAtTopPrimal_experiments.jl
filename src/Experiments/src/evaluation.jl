@@ -68,7 +68,7 @@ function computemetrics(d, iter, subset)
     get!(dict, :τ, missing)
     get!(dict, :K, missing)
     get!(dict, :β, missing)
-    get!(dict, :surrogate)
+    delete!(dict, :surrogate)
 
     return DataFrame(dict)
 end
@@ -129,8 +129,8 @@ end
 
 function selectmetric(df, metric::Symbol; reducefunc = mean, addparams = true, kwargs...)
     tmp = select(df, vcat([:dataset, :poslabels, :seed, :model,  :K, :β, :λ, :τ], metric))
-    tmp.dataset .= datasetname.(tmp.dataset, tmp.poslabels, tmp.seed; kwargs...)
-    tmp.model .= modelname.(tmp.model, tmp.τ; addparams)
+    tmp.dataset = datasetname.(tmp.dataset, tmp.poslabels, tmp.seed; kwargs...)
+    tmp.model = modelname.(tmp.model, tmp.τ; addparams)
 
     table = @from i in tmp begin
         @group i by {i.dataset, i.model, i.K, i.β, i.λ, i.τ} into gr
@@ -209,7 +209,7 @@ function betterparams(model, gr)
     else
         if get(model) == "TopPushK"
             pars = gr.K
-        elseif any(contains.(get(model), ["Grill", "τFPL", "TopMean", "TopPush"]))
+        elseif any(contains.(string(get(model)), ["Grill", "τFPL", "TopMean", "TopPush"]))
             pars = gr.λ
         else
             pars = gr.β
@@ -279,7 +279,16 @@ function wilcoxontest_pval(table, method1, method2; digits = 6)
     end
 end
 
-function wilcoxontest(df_valid, df_test, metric; digits = 6, diag = true, kwargs...)
+function wilcoxontest(
+    df_valid,
+    df_test,
+    metric;
+    digits = 6,
+    diag = true,
+    type = "png",
+    kwargs...
+)
+
     table = selectbest(df_valid, df_test, metric; wide = true, kwargs...)
     prm = sortperm(Vector(PaperUtils.rankdf(table)[end, 2:end])) .+ 1
 
@@ -312,16 +321,14 @@ function wilcoxontest(df_valid, df_test, metric; digits = 6, diag = true, kwargs
         ticks = (n, algs),
         xrotation = 45,
         axis = false,
-        digits = 2,
+        digits = 3,
     )
 
-    file = datadir("plots_wil", "wilcoxon_$(metric).png")
+    file = datadir("plots", "wilcoxon", "wilcoxon_$(metric).$(type)")
     mkpath(dirname(file))
     savefig(plt, file)
     return pvals
 end
-
-
 
 # ------------------------------------------------------------------------------------------
 # Dataset summary
@@ -418,8 +425,9 @@ function rocgroup(grp; iter = 10000, subset = :test, npoints = 300, kwargs...)
 end
 
 function computeroc(targets, scores; xlims = (1e-4, 1), npoints = 300)
-    quantils = EvalMetrics.logrange(xlims[1], xlims[2], length = npoints)
+    quantils = EvalMetrics.logrange(xlims[1], xlims[2], length = npoints - 2)
     ts = threshold_at_fpr(targets, scores, quantils)
+    ts = sort(vcat(ts, 0.01, 0.05))
     return roccurve(targets, scores, ts)
 end
 
@@ -469,8 +477,21 @@ function plotroc(df, metric; kwargs...)
         mkpath(dirname(file))
         savefig(plt, file)
 
-        file_df = datadir("plots_csv", string(metric), dir, string(title, ".csv"))
+        file_df = datadir("tables", string(metric), dir, string(title, ".csv"))
         mkpath(dirname(file_df))
         CSV.write(file_df, DataFrame(fpr = fpr, tpr = tpr))
+    end
+end
+
+function mergecsv(path = datadir("tables"))
+    for (root, dirs, files) in walkdir(path)
+        isempty(files) && continue
+        cols = map(files) do file
+            table = CSV.read(joinpath(root, file), DataFrame; header = true)
+            rename!(table, names(table) .* "_$(file[1:end-4])")
+            rm(file)
+            return table
+        end
+        CSV.write(string(root, "csv"), reduce(hcat, cols))
     end
 end

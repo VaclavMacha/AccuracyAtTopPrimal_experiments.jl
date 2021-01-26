@@ -56,3 +56,12 @@ table = betterzero(df_train)
 for m in [:fpr_1, :fpr_5, :quant_1, :quant_5, :top, :auroc_1, :auroc_5]
     wilcoxontest(df_valid, df_test, m; addparams = true, addseed = true)
 end
+
+# ------------------------------------------------------------------------------------------
+# ROC plots
+# ------------------------------------------------------------------------------------------
+for m in [:fpr_1, :fpr_5, :quant_1, :quant_5, :top, :auroc_1, :auroc_5]
+    plotroc(df_valid, m; iter, subset = :test)
+end
+
+mergecsv()
