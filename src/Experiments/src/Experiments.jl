@@ -31,7 +31,7 @@ using Flux: gpu, cpu, params
 using StatsBase: sample
 
 export Data, Train, Model
-export trainmodel, davemodel, loadmodel, loaddata, run_simulations, collect_metrics, selectmetric, selectbest, betterzero, crit_diag, run_benchmarks, summary, restore_path, loadrow, plotroc, wilcoxontest, corelationmatrix
+export trainmodel, davemodel, loadmodel, loaddata, run_simulations, collect_metrics, selectmetric, selectbest, betterzero, crit_diag, run_benchmarks, summary, restore_path, loadrow, plotroc, wilcoxontest, corelationmatrix, mergecsv
 
 DrWatson.datadir(args...) = joinpath("/disk/macha/data_oms/data_new", args...)
 modeldir(args...) = datadir("models", args...)

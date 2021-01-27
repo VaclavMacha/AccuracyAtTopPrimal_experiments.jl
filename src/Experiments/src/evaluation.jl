@@ -238,10 +238,15 @@ function betterzero(df; wide = true)
     end
 
     if wide
-        return unstack(table_pars, :dataset, :params)
+        result = unstack(table_pars, :dataset, :params)
     else
-        return table_pars
+        result = table_pars
     end
+
+    file = datadir("results", "better_zero_loss.csv")
+    mkpath(dirname(file))
+    CSV.write(file, result)
+    return result
 end
 
 # ------------------------------------------------------------------------------------------
@@ -488,10 +493,13 @@ function mergecsv(path = datadir("tables"))
         isempty(files) && continue
         cols = map(files) do file
             table = CSV.read(joinpath(root, file), DataFrame; header = true)
-            rename!(table, names(table) .* "_$(file[1:end-4])")
-            rm(file)
+            modelname = replace(file, "τ" => "tau")
+            modelname = replace(modelname, "(0.01)" => "1")
+            modelname = replace(modelname, "(0.05)" => "5")
+            rename!(table, names(table) .* "_$(modelname)")
+            # rm(file)
             return table
         end
-        CSV.write(string(root, "csv"), reduce(hcat, cols))
+        CSV.write(string(root, ".csv"), reduce(hcat, cols))
     end
 end
