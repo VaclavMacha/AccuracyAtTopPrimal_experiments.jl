@@ -1,3 +1,6 @@
+using DrWatson
+quickactivate(@__DIR__, "AccuracyAtTopPrimal_oms")
+
 using Experiments
 using Experiments: AccuracyAtTopPrimal, DatasetProvider
 
